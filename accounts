@@ -1,0 +1,171 @@
+1. Add State Variables (after line 23 in document 1)
+javascript// Account form states
+const [cifNumber, setCifNumber] = useState("");
+const [accountRegion, setAccountRegion] = useState("O");
+const [noAccounts, setNoAccounts] = useState(1);
+const [accountType, setAccountType] = useState("SBA");
+const [accountResponse, setAccountResponse] = useState([]);
+const [accountLoading, setAccountLoading] = useState(false);
+2. Add Account Submit Handler (after handleCifSubmit function, around line 145)
+javascript// Account submit handler
+const handleAccountSubmit = async (e) => {
+  e.preventDefault();
+  setAccountLoading(true);
+  const url = `http://10.1.161.199:5050/create_account/`;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        cif_number: cifNumber,
+        region: accountRegion,
+        no_account: parseInt(noAccounts, 10),
+        acc_type: accountType,
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`API returned an error: ${res.status} ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    setAccountResponse(data);
+  } catch (error) {
+    console.error("Fetch error:", error);
+    setAccountResponse([{ res_data: JSON.stringify({ ERROR_DESCRIPTION: error.message }) }]);
+  } finally {
+    setAccountLoading(false);
+  }
+};
+3. Add Account Download CSV (after downloadCsv function, around line 180)
+javascript// Download Account CSV
+const downloadAccountCsv = () => {
+  if (!accountResponse || accountResponse.length === 0) {
+    alert("No data to download.");
+    return;
+  }
+
+  const headers = ["Account Number"];
+  let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n";
+
+  accountResponse.forEach((item) => {
+    try {
+      const parsedResData = JSON.parse(item.res_data);
+      const row = [parsedResData.ACCOUNT_NUMBER || ""].map((field) => `"${field}"`).join(",");
+      csvContent += row + "\n";
+    } catch (e) {
+      console.error("Error parsing res_data for CSV:", e);
+    }
+  });
+
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", "account_data.csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+4. Add Sidebar Button (in the sidebar section, after the Deposit button, around line 520)
+javascript<button
+  onClick={() => setActiveService("account")}
+  style={{
+    ...styles.sidebarBtn,
+    backgroundColor: activeService === "account" ? "#003478" : "transparent",
+    color: activeService === "account" ? "white" : "#fff",
+  }}
+>
+  <FileText size={20} />
+  Account
+</button>
+5. Add Account Service Section (in main content, after deposit service section, around line 680)
+javascript{activeService === "account" && (
+  <div style={styles.serviceContainer}>
+    <h1 style={styles.serviceTitle}>Create Account</h1>
+    <div style={styles.form}>
+      <div style={styles.formGroup}>
+        <label style={styles.label}>CIF Number:</label>
+        <input
+          type="text"
+          value={cifNumber}
+          onChange={(e) => setCifNumber(e.target.value)}
+          style={styles.input}
+          placeholder="Enter CIF Number"
+          required
+        />
+      </div>
+      <div style={styles.formGroup}>
+        <label style={styles.label}>Region:</label>
+        <select
+          value={accountRegion}
+          onChange={(e) => setAccountRegion(e.target.value)}
+          style={styles.input}
+        >
+          <option value="X">X - UAT</option>
+          <option value="O">O - UAT</option>
+          <option value="Y">Y - UAT</option>
+          <option value="Z">Z - UAT</option>
+          <option value="K">K - Pre-Prod</option>
+          <option value="J">J - Pre-Prod</option>
+          <option value="R1">R1 - Pre-Prod</option>
+          <option value="Y2">Y2 - Pre-Prod</option>
+          <option value="L">L - Pre-Prod</option>
+          <option value="C">C - Pre-Prod</option>
+        </select>
+      </div>
+      <div style={styles.formGroup}>
+        <label style={styles.label}>No. of Accounts:</label>
+        <input
+          type="number"
+          min="1"
+          max="10"
+          value={noAccounts}
+          onChange={(e) => setNoAccounts(e.target.value)}
+          style={styles.input}
+          required
+        />
+      </div>
+      <div style={styles.formGroup}>
+        <label style={styles.label}>Account Type:</label>
+        <select
+          value={accountType}
+          onChange={(e) => setAccountType(e.target.value)}
+          style={styles.input}
+        >
+          <option value="SBA">Savings Bank Account</option>
+          <option value="CAA">Current Account</option>
+        </select>
+      </div>
+      <button onClick={handleAccountSubmit} style={styles.submitBtn} disabled={accountLoading}>
+        {accountLoading ? "Submitting..." : "Submit"}
+      </button>
+    </div>
+
+    {accountResponse && accountResponse.length > 0 && (
+      <div style={styles.responseContainer}>
+        <button onClick={downloadAccountCsv} style={styles.downloadBtn}>
+          Download CSV
+        </button>
+        {accountResponse.map((item, index) => {
+          try {
+            const parsedResData = JSON.parse(item.res_data);
+            return (
+              <div key={index} style={styles.resultItem}>
+                <p>Account Number: {parsedResData.ACCOUNT_NUMBER}</p>
+              </div>
+            );
+          } catch (e) {
+            return (
+              <div key={index} style={styles.resultItem}>
+                <p>Error parsing res_data: {item.res_data}</p>
+              </div>
+            );
+          }
+        })}
+      </div>
+    )}
+  </div>
+)}
