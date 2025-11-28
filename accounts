@@ -1,88 +1,145 @@
-import { useState } from "react";
-import { Menu, LogOut, Home, Zap, DollarSign, FileText, CreditCard } from "lucide-react";
+
+"use client";
+
+import { useState, useEffect } from "react";
+import { Menu, LogOut, Home, FileText, DollarSign, Zap, User, TrendingUp, Shield } from "lucide-react";
 
 export default function SBIApp() {
   const [currentPage, setCurrentPage] = useState("welcome");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userName, setUserName] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeService, setActiveService] = useState("home");
-  
-  // Form states for login/register
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [departmentCode, setDepartmentCode] = useState(0);
-  const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  
-  // CIF form states
+
+  const [user, setUser] = useState(null);
+  const [userToken, setToken] = useState(null);
+
   const [region, setRegion] = useState("O");
-  const [noCif, setNoCif] = useState(1);
-  const [accType, setAccType] = useState("PCIF");
-  const [cifResponse, setCifResponse] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [no_cif, setNoCif] = useState(1);
+  const [acc_type, setAccType] = useState('PCIF');
+  const [response, setCifResponse] = useState([]);
+  const [cifLoading, setCifLoading] = useState(false);
 
-  // Account form states
-  const [cifNumber, setCifNumber] = useState("");
-  const [accountRegion, setAccountRegion] = useState("O");
-  const [noAccounts, setNoAccounts] = useState(1);
-  const [accountType, setAccountType] = useState("SBA");
-  const [accountResponse, setAccountResponse] = useState([]);
-  const [accountLoading, setAccountLoading] = useState(false);
 
-  // ============================================================================
-  // LOGIN COMPONENT
-  // ============================================================================
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setError("");
+
+  const [ccodregion, setccodRegion] = useState("O");
+  const [cif, setCif] = useState("");
+  const [prod_code, setProd_code] = useState("");
+  const [acc_segment, setAcc_Segment] = useState("");
+  const [no_acc, setNo_acc] = useState(1);
+  const [ccodresponse, setccodResponse] = useState([]);
+  const [ccodloading, setccodLoading] = useState(false);
+  const [ccoderror, setCcoderror] = useState([]);
+
+  useEffect(() => {
+    const storedToken = localStorage.getItem('userToken');
+    if (storedToken) {
+      setToken(storedToken);
+      fetchUserProfile(storedToken);
+    }
+  }, []);
+
+
+  //===========================================================
+  // profile component
+  //===========================================================
+
+  const fetchUserProfile = async () => {
     try {
-      const res = await fetch('http://10.1.161.165:5050/token', {
-        method: 'POST',
+      const storedToken = localStorage.getItem('userToken');
+      setLoading(true);
+      const response = await fetch('http://10.1.161.:5050/users/me/', {
+        method: "GET",
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+          "Accept": "application/json",
+          "Authorization": `Bearer ${storedToken}`,
         },
-        body: new URLSearchParams({
-          username,
-          password
-        })
       });
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.detail || 'Login failed');
-      }
+      if (!response.ok) throw new Error("Failed to fetch user data");
 
-      const data = await res.json();
-      setUserName(username);
+      const userData = await response.json();
+      setUser(userData);
       setIsLoggedIn(true);
       setCurrentPage("dashboard");
-      setUsername("");
-      setPassword("");
     } catch (err) {
-      setError(err.message);
+      console.error(err);
+      setError(err.message || "Failed to fetch user profile");
+      localStorage.removeItem('userToken');
+      setToken(null);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Register handler
+  //===========================================================
+  // login component
+  //===========================================================
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch("http://10.1.161.:5050/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ username, password }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.detail || "Login failed");
+      }
+
+      const data = await response.json();
+      const authToken = data.access_token;
+
+      localStorage.setItem('userToken', authToken);
+      setToken(authToken);
+      setUsername("");
+      setPassword("");
+
+      await fetchUserProfile(authToken);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+  //===========================================================
+  // Register component
+  //===========================================================
+
   const handleRegister = async (e) => {
     e.preventDefault();
-    setError("");
+
+    if (password !== confirmPassword) {
+      setMessage("Passwords do not match");
+      return;
+    }
+
+    setLoading(true);
     setMessage("");
-    
+
     try {
-      const response = await fetch('http://10.1.161.164:5050/user', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      const response = await fetch("http://10.1.161.:5050/user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          username,
-          password,
-          firstName,
-          lastName,
+          username, password, firstName, lastName,
           departmentCode: Number(departmentCode),
         }),
       });
@@ -90,645 +147,983 @@ export default function SBIApp() {
       const data = await response.json();
 
       if (response.ok) {
-        setMessage('User registered successfully! Redirecting to login...');
+        setMessage("Registration successful! Redirecting to login...");
         setTimeout(() => {
           setCurrentPage("login");
           setUsername("");
           setPassword("");
+          setConfirmPassword("");
           setFirstName("");
           setLastName("");
           setDepartmentCode(0);
-          setMessage("");
         }, 2000);
       } else {
-        setError(`Error: ${data.detail}`);
+        setMessage(`Error: ${data.detail}`);
       }
     } catch (error) {
-      setError('An unexpected error occurred. Please try again.');
-    }
-  };
-
-  // Logout handler
-  const handleLogout = () => {
-    setIsLoggedIn(false);
-    setCurrentPage("welcome");
-    setUserName("");
-    setActiveService("home");
-  };
-
-  // ============================================================================
-  // CIF COMPONENT
-  // ============================================================================
-  const handleCifSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    const url = `http://10.1.161.199:5050/create_cif/`;
-
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          region: region,
-          no_cif: parseInt(noCif, 10),
-          acc_type: accType,
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`API returned an error: ${res.status} ${res.statusText}`);
-      }
-
-      const data = await res.json();
-      setCifResponse(data);
-    } catch (error) {
-      console.error("Fetch error:", error);
-      setCifResponse([{ res_data: JSON.stringify({ ERROR_DESCRIPTION: error.message }) }]);
+      setMessage("An unexpected error occurred. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Download CSV
+
+  //===========================================================
+  // logout component
+  //===========================================================
+  const handleLogout = () => {
+    localStorage.removeItem('userToken');
+    setToken(null);
+    setUser(null);
+    setIsLoggedIn(false);
+    setCurrentPage("welcome");
+    setActiveService("home");
+  };
+
+
+  //===========================================================
+  // CIF component
+  //===========================================================
+
+  const handleCifSubmit = async (e) => {
+    e.preventDefault();
+    setCifLoading(true); // Start loading
+
+    console.log(region)
+    console.log(no_cif)
+    console.log(acc_type)
+
+    const userToken = localStorage.getItem('userToken');
+    try {
+      const res = await fetch(`http://10.1.161.:5050/create_cif`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          'Authorization': `Bearer ${userToken}`, // Header names don't need quotes
+        },
+        body: JSON.stringify({
+          region: region,
+          no_cif: parseInt(no_cif, 10),
+          acc_type: acc_type,
+        }),
+      });
+
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          // This is why your token is removed when an auth error occurs:
+          localStorage.removeItem('userToken');
+          setError('Session expired or unauthorized. Please log in again.');
+          return; // Stop execution here
+        }
+        throw new Error(`API returned an error: ${res.status} ${res.statusText}`);
+      }
+
+      const data = await res.json();
+      setCifResponse(data);
+      console.log(data[0].RRN)
+      console.log(data)
+
+    } catch (error) {
+      console.error("Fetch error:", error);
+      // Only update response if the error wasn't the auth one we handled above
+      if (!error.message.includes('unauthorized')) {
+        setCifResponse([{ res_data: JSON.stringify({ ERROR_DESCRIPTION: error.message }) }]);
+      }
+    } finally {
+      // Use the correct state setter for this specific function
+      setCifLoading(false);
+    }
+  };
+
   const downloadCsv = () => {
-    if (!cifResponse || cifResponse.length === 0) {
+    // Note: This function uses a 'response' variable that isn't defined in the snippet.
+    // Assuming 'response' should be 'cifResponse' based on the context.
+    if (!response || response.length === 0) {
       alert("No data to download.");
       return;
     }
 
-    const headers = ["Customer Number"];
-    let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n";
-
-    cifResponse.forEach((item) => {
+    let csvContent = "data:text/csv;charset=utf-8,Customer Number\n";
+    response.forEach((item) => { // Assuming 'response' should be 'cifResponse'
       try {
         const parsedResData = JSON.parse(item.res_data);
-        const row = [parsedResData.CUSTOMER_NUMBER || ""].map((field) => `"${field}"`).join(",");
-        csvContent += row + "\n";
+        csvContent += `"${parsedResData.CUSTOMER_NUMBER || ""}"\n`;
       } catch (e) {
-        console.error("Error parsing res_data for CSV:", e);
+        console.error("CSV parse error:", e);
       }
     });
 
-    const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+    link.setAttribute("href", encodeURI(csvContent));
     link.setAttribute("download", "cif_data.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // ============================================================================
-  // ACCOUNT COMPONENT
-  // ============================================================================
-  const handleAccountSubmit = async (e) => {
-    e.preventDefault();
-    setAccountLoading(true);
-    const url = `http://10.1.161.199:5050/create_account/`;
 
+  //===========================================================
+  // CCOD component
+  //===========================================================
+
+  const handleCcodSubmit = async (e) => {
+    e.preventDefault();
+    setCcoderror(null);
+    setccodResponse([])
+    setccodLoading(true);
+    console.log("Submitting with:", { ccodregion, cif, prod_code, acc_segment, no_acc });
+
+    const url = `http://10.1.161.:5050/create_deposit_account/`;
+
+    const userToken = localStorage.getItem('userToken');
     try {
-      const res = await fetch(url, {
+      const res = await fetch(`http://10.1.161:5050/create_deposit_account/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          'Authorization': `Bearer ${userToken}`, // Header names don't need quotes
         },
         body: JSON.stringify({
-          cif_number: cifNumber,
-          region: accountRegion,
-          no_account: parseInt(noAccounts, 10),
-          acc_type: accountType,
-        }),
+          ccodregion: ccodregion,
+          cif: cif,
+          p_code: prod_code,
+          seg_code: acc_segment,
+          no_acc: parseInt(no_acc, 10),
+        })
       });
 
       if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          // This is why your token is removed when an auth error occurs:
+          localStorage.removeItem('userToken');
+          setError('Session expired or unauthorized. Please log in again.');
+          return; // Stop execution here
+        }
         throw new Error(`API returned an error: ${res.status} ${res.statusText}`);
       }
 
+
       const data = await res.json();
-      setAccountResponse(data);
-    } catch (error) {
-      console.error("Fetch error:", error);
-      setAccountResponse([{ res_data: JSON.stringify({ ERROR_DESCRIPTION: error.message }) }]);
+      setccodResponse(data);
+      console.log("API response:", data);
+      console.log(data[0].RRN)
+      console.log(data)
+      ccoderror(err.message);
+
+    } catch (ccoderror) {
+      //console.ccoderror("Fetch error:", ccoderror);
+      // Only update response if the error wasn't the auth one we handled above
+      if (!ccoderror.message.includes('unauthorized')) {
+        setccodLoading([{ res_data: JSON.stringify({ ERROR_DESCRIPTION: ccoderror.message }) }]);
+      }
     } finally {
-      setAccountLoading(false);
+      // Use the correct state setter for this specific function
+      setccodLoading(false);
     }
   };
 
-  // Download Account CSV
-  const downloadAccountCsv = () => {
-    if (!accountResponse || accountResponse.length === 0) {
+  const ccoddownloadCsv = () => {
+    // Note: This function uses a 'response' variable that isn't defined in the snippet.
+    // Assuming 'response' should be 'cifResponse' based on the context.
+    if (!response || response.length === 0) {
       alert("No data to download.");
       return;
     }
 
-    const headers = ["Account Number"];
-    let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n";
-
-    accountResponse.forEach((item) => {
+    let csvContent = "data:text/csv;charset=utf-8,Customer Number\n";
+    response.forEach((item) => { // Assuming 'response' should be 'cifResponse'
       try {
         const parsedResData = JSON.parse(item.res_data);
-        const row = [parsedResData.ACCOUNT_NUMBER || ""].map((field) => `"${field}"`).join(",");
-        csvContent += row + "\n";
+        csvContent += `"${parsedResData.CUSTOMER_NUMBER || ""}"\n`;
       } catch (e) {
-        console.error("Error parsing res_data for CSV:", e);
+        console.ccorerror("CSV parse error:", e);
       }
     });
 
-    const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "account_data.csv");
+    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("download", "Ccod_data.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // ============================================================================
-  // WELCOME COMPONENT
-  // ============================================================================
+
+
+
+  //===========================================================
+  // WELCOME component
+  //===========================================================e
   if (currentPage === "welcome" && !isLoggedIn) {
     return (
       <div style={styles.welcomeContainer}>
         <nav style={styles.navbar}>
           <div style={styles.navBrand}>
-            <span style={styles.brandText}>SBI Bank</span>
+            <div style={styles.logoCircle}>SBI</div>
+            <span style={styles.brandText}>State Bank of India</span>
           </div>
           <div style={styles.navLinks}>
             <button onClick={() => setCurrentPage("login")} style={styles.navBtn}>
-              Login
+              Sign In
             </button>
             <button onClick={() => setCurrentPage("register")} style={styles.navBtnPrimary}>
-              Register
+              Get Started
             </button>
           </div>
         </nav>
 
         <div style={styles.heroSection}>
-          <h1 style={styles.heroTitle}>Welcome to SBI Bank Services</h1>
-          <p style={styles.heroSubtitle}>Manage your banking needs efficiently</p>
-          <div style={styles.heroButtons}>
-            <button onClick={() => setCurrentPage("login")} style={styles.primaryBtn}>
-              Get Started
-            </button>
+          <div style={styles.heroContent}>
+            <div style={styles.heroTag}>AUTOMATED TEST DATA PLATFORM</div>
+            <h1 style={styles.heroTitle}>
+              Advanced Banking<br />Test Data Creation
+            </h1>
+            <p style={styles.heroSubtitle}>
+              Streamline your testing workflow with automated CIF, CCOD, and deposit account generation
+            </p>
+            <div style={styles.heroButtons}>
+              <button onClick={() => setCurrentPage("login")} style={styles.heroPrimaryBtn}>
+                Get Started
+                <span style={styles.btnArrow}>→</span>
+              </button>
+              <button onClick={() => setCurrentPage("register")} style={styles.heroSecondaryBtn}>
+                Learn More
+              </button>
+            </div>
+          </div>
+
+          <div style={styles.featuresGrid}>
+            <div style={styles.featureCard}>
+              <Shield size={32} color="#003478" />
+              <h3>Secure & Reliable</h3>
+              <p>Enterprise-grade security for your test data</p>
+            </div>
+            <div style={styles.featureCard}>
+              <TrendingUp size={32} color="#003478" />
+              <h3>High Performance</h3>
+              <p>Generate test data at scale efficiently</p>
+            </div>
+            <div style={styles.featureCard}>
+              <FileText size={32} color="#003478" />
+              <h3>Complete Records</h3>
+              <p>Full CIF and account data creation</p>
+            </div>
           </div>
         </div>
 
         <footer style={styles.footer}>
-          <p>© 2025 State Bank of India (SBI). All rights reserved.</p>
+          <p>© 2025 State Bank of India. All rights reserved.</p>
         </footer>
       </div>
     );
   }
 
-  // ============================================================================
-  // LOGIN PAGE
-  // ============================================================================
+  //===========================================================
+  // LOGIN component FRONT
+  //===========================================================
   if (currentPage === "login" && !isLoggedIn) {
     return (
       <div style={styles.authContainer}>
-        <nav style={styles.navbar}>
-          <div style={styles.navBrand}>
-            <span style={styles.brandText}>SBI Bank</span>
-          </div>
-          <button onClick={() => setCurrentPage("welcome")} style={styles.backBtn}>
-            Back
-          </button>
-        </nav>
-
-        <div style={styles.authFormContainer}>
-          <div style={styles.authForm}>
-            <h2 style={styles.authTitle}>Login</h2>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Username</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                style={styles.input}
-                required
-              />
+        <div style={styles.authSplit}>
+          <div style={styles.authLeft}>
+            <div style={styles.authBrand}>
+              <div style={styles.logoCircle}>SBI</div>
+              <span style={styles.brandText}>State Bank of India</span>
             </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={styles.input}
-                required
-              />
-            </div>
-            {error && <p style={styles.errorMessage}>{error}</p>}
-            <button onClick={handleLogin} style={styles.submitBtn}>
-              Login
-            </button>
-            <p style={styles.switchAuth}>
-              Don't have an account?{" "}
-              <span onClick={() => setCurrentPage("register")} style={styles.linkBtn}>
-                Register here
-              </span>
+            <h1 style={styles.authLeftTitle}>Welcome Back</h1>
+            <p style={styles.authLeftSubtitle}>
+              Sign in to access your test data creation platform
             </p>
+            <div style={styles.authFeatureList}>
+              <div style={styles.authFeature}>✓ Automated CIF Generation</div>
+              <div style={styles.authFeature}>✓ CCOD Account Creation</div>
+              <div style={styles.authFeature}>✓ Deposit Management</div>
+            </div>
+          </div>
+
+          <div style={styles.authRight}>
+            <div style={styles.authForm}>
+              <button onClick={() => setCurrentPage("welcome")} style={styles.backLink}>
+                ← Back to Home
+              </button>
+              <h2 style={styles.authTitle}>Sign In</h2>
+              <p style={styles.authSubtitle}>Enter your credentials to continue</p>
+
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Username</label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  style={styles.input}
+                  placeholder="Enter your username"
+                  required
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  style={styles.input}
+                  placeholder="Enter your password"
+                  required
+                />
+              </div>
+
+              {error && <div style={styles.errorMsg}>{error}</div>}
+
+              <button onClick={handleLogin} style={styles.submitBtn} disabled={loading}>
+                {loading ? "Signing in..." : "Sign In"}
+              </button>
+
+              <div style={styles.divider}>
+                <span style={styles.dividerText}>Don't have an account?</span>
+              </div>
+
+              <button
+                onClick={() => { setCurrentPage("register"); setError(""); }}
+                style={styles.switchBtn}
+              >
+                Create Account
+              </button>
+            </div>
           </div>
         </div>
-
-        <footer style={styles.footer}>
-          <p>© 2025 State Bank of India (SBI). All rights reserved.</p>
-        </footer>
       </div>
     );
   }
-
-  // ============================================================================
-  // REGISTER PAGE
-  // ============================================================================
+  //===========================================================
+  // REGISTER FRONT component
+  //===========================================================
   if (currentPage === "register" && !isLoggedIn) {
     return (
       <div style={styles.authContainer}>
-        <nav style={styles.navbar}>
-          <div style={styles.navBrand}>
-            <span style={styles.brandText}>SBI Bank</span>
-          </div>
-          <button onClick={() => setCurrentPage("welcome")} style={styles.backBtn}>
-            Back
-          </button>
-        </nav>
-
-        <div style={styles.authFormContainer}>
-          <div style={styles.authForm}>
-            <h2 style={styles.authTitle}>Register</h2>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Username</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                style={styles.input}
-                required
-              />
+        <div style={styles.authSplit}>
+          <div style={styles.authLeft}>
+            <div style={styles.authBrand}>
+              <div style={styles.logoCircle}>SBI</div>
+              <span style={styles.brandText}>State Bank of India</span>
             </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={styles.input}
-                required
-              />
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>First Name</label>
-              <input
-                type="text"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                style={styles.input}
-                required
-              />
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Last Name</label>
-              <input
-                type="text"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                style={styles.input}
-                required
-              />
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Department Code</label>
-              <input
-                type="number"
-                value={departmentCode}
-                onChange={(e) => setDepartmentCode(e.target.value)}
-                style={styles.input}
-                required
-              />
-            </div>
-            {error && <p style={styles.errorMessage}>{error}</p>}
-            {message && <p style={styles.successMessage}>{message}</p>}
-            <button onClick={handleRegister} style={styles.submitBtn}>
-              Register
-            </button>
-            <p style={styles.switchAuth}>
-              Already have an account?{" "}
-              <span onClick={() => setCurrentPage("login")} style={styles.linkBtn}>
-                Login here
-              </span>
+            <h1 style={styles.authLeftTitle}>Join Our Platform</h1>
+            <p style={styles.authLeftSubtitle}>
+              Create an account to start generating test data
             </p>
+            <div style={styles.authFeatureList}>
+              <div style={styles.authFeature}>✓ Quick Setup Process</div>
+              <div style={styles.authFeature}>✓ Secure Authentication</div>
+              <div style={styles.authFeature}>✓ Full Platform Access</div>
+            </div>
+          </div>
+
+          <div style={styles.authRight}>
+            <div style={styles.authForm}>
+              <button onClick={() => setCurrentPage("welcome")} style={styles.backLink}>
+                ← Back to Home
+              </button>
+              <h2 style={styles.authTitle}>Create Account</h2>
+              <p style={styles.authSubtitle}>Fill in your details to get started</p>
+
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Username</label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  style={styles.input}
+                  placeholder="Choose a username"
+                  required
+                />
+              </div>
+
+              <div style={styles.formRow}>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>First Name</label>
+                  <input
+                    type="text"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    style={styles.input}
+                    placeholder="First name"
+                    required
+                  />
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Last Name</label>
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    style={styles.input}
+                    placeholder="Last name"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Department Code</label>
+                <input
+                  type="number"
+                  value={departmentCode}
+                  onChange={(e) => setDepartmentCode(e.target.value)}
+                  style={styles.input}
+                  placeholder="Enter department code"
+                  required
+                />
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  style={styles.input}
+                  placeholder="Create a password"
+                  required
+                />
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Confirm Password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  style={styles.input}
+                  placeholder="Confirm your password"
+                  required
+                />
+              </div>
+
+              {message && (
+                <div style={{
+                  ...styles.errorMsg,
+                  backgroundColor: message.startsWith("Error") ? "#ffebee" : "#e8f5e9",
+                  color: message.startsWith("Error") ? "#c62828" : "#2e7d32"
+                }}>
+                  {message}
+                </div>
+              )}
+
+              <button onClick={handleRegister} style={styles.submitBtn} disabled={loading}>
+                {loading ? "Creating Account..." : "Create Account"}
+              </button>
+
+              <div style={styles.divider}>
+                <span style={styles.dividerText}>Already have an account?</span>
+              </div>
+
+              <button
+                onClick={() => { setCurrentPage("login"); setMessage(""); }}
+                style={styles.switchBtn}
+              >
+                Sign In Instead
+              </button>
+            </div>
           </div>
         </div>
-
-        <footer style={styles.footer}>
-          <p>© 2025 State Bank of India (SBI). All rights reserved.</p>
-        </footer>
       </div>
     );
   }
 
-  // ============================================================================
-  // DASHBOARD PAGE
-  // ============================================================================
-  if (isLoggedIn) {
+  //===========================================================
+  // DASHBOARD component
+  //===========================================================
+  if (isLoggedIn && user) {
     return (
       <div style={styles.dashboardContainer}>
-        <nav style={styles.navbar}>
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} style={styles.menuBtn}>
-            <Menu size={24} />
-          </button>
-          <div style={styles.navBrand}>
-            <span style={styles.brandText}>SBI Bank Dashboard</span>
+        <nav style={styles.dashboardNav}>
+          <div style={styles.dashNavLeft}>
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} style={styles.menuBtn}>
+              <Menu size={20} />
+            </button>
+            <div style={styles.navBrand}>
+              <div style={styles.logoCircleSmall}>SBI</div>
+              <span style={styles.brandTextSmall}>Test Data Platform</span>
+            </div>
           </div>
-          <div style={styles.navRight}>
-            <span style={styles.userName}>Welcome, {userName}</span>
-            <button onClick={handleLogout} style={styles.logoutBtn}>
-              <LogOut size={20} />
+          <div style={styles.dashNavRight}>
+            <div style={styles.userInfo}>
+              <div style={styles.userAvatar}>{user.firstName?.charAt(0)}{user.lastName?.charAt(0)}</div>
+              <div style={styles.userDetails}>
+                <div style={styles.userNameNav}>{user.firstName} {user.lastName}</div>
+                <div style={styles.userRole}>Dept {user.departmentCode}</div>
+              </div>
+            </div>
+            <button onClick={handleLogout} style={styles.logoutBtnNav}>
+              <LogOut size={18} />
             </button>
           </div>
         </nav>
 
         <div style={styles.mainContainer}>
-          {/* Sidebar */}
-          <aside style={{ ...styles.sidebar, display: sidebarOpen ? "flex" : "none" }}>
-            <div style={styles.sidebarContent}>
-              <button
-                onClick={() => setActiveService("home")}
-                style={{
-                  ...styles.sidebarBtn,
-                  backgroundColor: activeService === "home" ? "#003478" : "transparent",
-                  color: activeService === "home" ? "white" : "#fff",
-                }}
-              >
-                <Home size={20} />
-                Dashboard
-              </button>
-              <button
-                onClick={() => setActiveService("cif")}
-                style={{
-                  ...styles.sidebarBtn,
-                  backgroundColor: activeService === "cif" ? "#003478" : "transparent",
-                  color: activeService === "cif" ? "white" : "#fff",
-                }}
-              >
-                <FileText size={20} />
-                CIF
-              </button>
-              <button
-                onClick={() => setActiveService("account")}
-                style={{
-                  ...styles.sidebarBtn,
-                  backgroundColor: activeService === "account" ? "#003478" : "transparent",
-                  color: activeService === "account" ? "white" : "#fff",
-                }}
-              >
-                <CreditCard size={20} />
-                Account
-              </button>
-              <button
-                onClick={() => setActiveService("ccod")}
-                style={{
-                  ...styles.sidebarBtn,
-                  backgroundColor: activeService === "ccod" ? "#003478" : "transparent",
-                  color: activeService === "ccod" ? "white" : "#fff",
-                }}
-              >
-                <DollarSign size={20} />
-                CCOD
-              </button>
-              <button
-                onClick={() => setActiveService("deposit")}
-                style={{
-                  ...styles.sidebarBtn,
-                  backgroundColor: activeService === "deposit" ? "#003478" : "transparent",
-                  color: activeService === "deposit" ? "white" : "#fff",
-                }}
-              >
-                <Zap size={20} />
-                Deposit
-              </button>
-              <div style={styles.sidebarSpacer}></div>
-              <button onClick={handleLogout} style={styles.logoutSidebarBtn}>
-                <LogOut size={20} />
-                Logout
-              </button>
-            </div>
+          <aside style={{ ...styles.sidebar, width: sidebarOpen ? "260px" : "0", padding: sidebarOpen ? "1.5rem 0" : "0", overflow: "hidden" }}>
+            {sidebarOpen && (
+              <div style={styles.sidebarContent}>
+                <div style={styles.sidebarSection}>
+                  <div style={styles.sidebarLabel}>MAIN MENU</div>
+                  <button
+                    onClick={() => setActiveService("home")}
+                    style={{
+                      ...styles.sidebarBtn,
+                      backgroundColor: activeService === "home" ? "#e3f2fd" : "transparent",
+                      color: activeService === "home" ? "#003478" : "#666",
+                      fontWeight: activeService === "home" ? "600" : "normal",
+                    }}
+                  >
+                    <Home size={20} />
+                    Dashboard
+                  </button>
+                </div>
+
+                <div style={styles.sidebarSection}>
+                  <div style={styles.sidebarLabel}>SERVICES</div>
+                  <button
+                    onClick={() => setActiveService("cif")}
+                    style={{
+                      ...styles.sidebarBtn,
+                      backgroundColor: activeService === "cif" ? "#e3f2fd" : "transparent",
+                      color: activeService === "cif" ? "#003478" : "#666",
+                      fontWeight: activeService === "cif" ? "600" : "normal",
+                    }}
+                  >
+                    <FileText size={20} />
+                    CIF Creation
+                  </button>
+                  <button
+                    onClick={() => setActiveService("ccod")}
+                    style={{
+                      ...styles.sidebarBtn,
+                      backgroundColor: activeService === "ccod" ? "#e3f2fd" : "transparent",
+                      color: activeService === "ccod" ? "#003478" : "#666",
+                      fontWeight: activeService === "ccod" ? "600" : "normal",
+                    }}
+                  >
+                    <DollarSign size={20} />
+                    CCOD Account
+                  </button>
+                  <button
+                    onClick={() => setActiveService("deposit")}
+                    style={{
+                      ...styles.sidebarBtn,
+                      backgroundColor: activeService === "deposit" ? "#e3f2fd" : "transparent",
+                      color: activeService === "deposit" ? "#003478" : "#666",
+                      fontWeight: activeService === "deposit" ? "600" : "normal",
+                    }}
+                  >
+                    <Zap size={20} />
+                    Deposit Account
+                  </button>
+                  <button
+                    onClick={() => setActiveService("CKYC")}
+                    style={{
+                      ...styles.sidebarBtn,
+                      backgroundColor: activeService === "CKYC" ? "#e3f2fd" : "transparent",
+                      color: activeService === "CKYC" ? "#003478" : "#666",
+                      fontWeight: activeService === "CKYC" ? "600" : "normal",
+                    }}
+                  >
+                    <DollarSign size={20} />
+                    CKYC
+                  </button>
+
+                  <button
+                    onClick={() => setActiveService("social attribute")}
+                    style={{
+                      ...styles.sidebarBtn,
+                      backgroundColor: activeService === "social attribute" ? "#e3f2fd" : "transparent",
+                      color: activeService === "social attribute" ? "#003478" : "#666",
+                      fontWeight: activeService === "social attribute" ? "600" : "normal",
+                    }}
+                  >
+                    <DollarSign size={20} />
+                    social attribute
+                  </button>
+
+                </div>
+              </div>
+            )}
           </aside>
 
-          {/* Main Content */}
           <main style={styles.content}>
             {activeService === "home" && (
-              <div style={styles.serviceContainer}>
-                <h1 style={styles.serviceTitle}>Dashboard</h1>
-                <div style={styles.welcomeBox}>
-                  <p>Welcome to your SBI Bank Dashboard, {userName}!</p>
-                  <p>Select a service from the sidebar to get started.</p>
+              <div>
+                <div style={styles.pageHeader}>
+                  <div>
+                    <h1 style={styles.pageTitle}>Dashboard</h1>
+                    <p style={styles.pageSubtitle}>Welcome back, {user.firstName}! Here's your overview</p>
+                  </div>
+                </div>
+
+                <div style={styles.statsGrid}>
+                  <div style={styles.statCard}>
+                    <div style={{ ...styles.statIcon, backgroundColor: "#e3f2fd" }}>
+                      <FileText size={24} color="#003478" />
+                    </div>
+                    <div style={styles.statContent}>
+                      <div style={styles.statLabel}>CIF Records</div>
+                      <div style={styles.statValue}>0</div>
+                    </div>
+                  </div>
+                  <div style={styles.statCard}>
+                    <div style={{ ...styles.statIcon, backgroundColor: "#fff3e0" }}>
+                      <DollarSign size={24} color="#f57c00" />
+                    </div>
+                    <div style={styles.statContent}>
+                      <div style={styles.statLabel}>CCOD Accounts</div>
+                      <div style={styles.statValue}>0</div>
+                    </div>
+                  </div>
+                  <div style={styles.statCard}>
+                    <div style={{ ...styles.statIcon, backgroundColor: "#e8f5e9" }}>
+                      <Zap size={24} color="#2e7d32" />
+                    </div>
+                    <div style={styles.statContent}>
+                      <div style={styles.statLabel}>Deposits</div>
+                      <div style={styles.statValue}>0</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={styles.userProfileCard}>
+                  <div style={styles.profileHeader}>
+                    <User size={24} color="#003478" />
+                    <h2 style={styles.profileTitle}>Profile Information</h2>
+                  </div>
+                  <div style={styles.profileGrid}>
+                    <div style={styles.profileItem}>
+                      <span style={styles.profileLabel}>Username</span>
+                      <span style={styles.profileValue}>{user.username}</span>
+                    </div>
+                    <div style={styles.profileItem}>
+                      <span style={styles.profileLabel}>First Name</span>
+                      <span style={styles.profileValue}>{user.firstName}</span>
+                    </div>
+                    <div style={styles.profileItem}>
+                      <span style={styles.profileLabel}>Last Name</span>
+                      <span style={styles.profileValue}>{user.lastName}</span>
+                    </div>
+                    <div style={styles.profileItem}>
+                      <span style={styles.profileLabel}>Department Code</span>
+                      <span style={styles.profileValue}>{user.departmentCode}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* ============================================================================ */}
-            {/* CIF SERVICE */}
-            {/* ============================================================================ */}
             {activeService === "cif" && (
-              <div style={styles.serviceContainer}>
-                <h1 style={styles.serviceTitle}>Create CIF</h1>
-                <div style={styles.form}>
-                  <div style={styles.formGroup}>
-                    <label style={styles.label}>Region:</label>
-                    <select
-                      value={region}
-                      onChange={(e) => setRegion(e.target.value)}
-                      style={styles.input}
-                    >
-                      <option value="X">X - UAT</option>
-                      <option value="O">O - UAT</option>
-                      <option value="Y">Y - UAT</option>
-                      <option value="Z">Z - UAT</option>
-                      <option value="K">K - Pre-Prod</option>
-                      <option value="J">J - Pre-Prod</option>
-                      <option value="R1">R1 - Pre-Prod</option>
-                      <option value="Y2">Y2 - Pre-Prod</option>
-                      <option value="L">L - Pre-Prod</option>
-                      <option value="C">C - Pre-Prod</option>
-                    </select>
+              <div>
+                <div style={styles.pageHeader}>
+                  <div>
+                    <h1 style={styles.pageTitle}>CIF Creation</h1>
+                    <p style={styles.pageSubtitle}>Generate Customer Information Files for testing</p>
                   </div>
-                  <div style={styles.formGroup}>
-                    <label style={styles.label}>No. of CIF:</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="10"
-                      value={noCif}
-                      onChange={(e) => setNoCif(e.target.value)}
-                      style={styles.input}
-                      required
-                    />
+                </div>
+
+                <div style={styles.formCard}>
+                  <div style={styles.formGrid}>
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>Region</label>
+                      <select value={region} onChange={(e) => setRegion(e.target.value)} style={styles.select}>
+                        <option value="X">X - UAT</option>
+                        <option value="O">O - UAT</option>
+                        <option value="Y">Y - UAT</option>
+                        <option value="Z">Z - UAT</option>
+                        <option value="K">K - Pre-Prod</option>
+                        <option value="J">J - Pre-Prod</option>
+                        <option value="R1">R1 - Pre-Prod</option>
+                        <option value="Y2">Y2 - Pre-Prod</option>
+                        <option value="L">L - Pre-Prod</option>
+                        <option value="C">C - Pre-Prod</option>
+                      </select>
+                    </div>
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>Number of CIF</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={no_cif}
+                        onChange={(e) => setNoCif(e.target.value)}
+                        style={styles.input}
+                        placeholder="Enter quantity (1-10)"
+                      />
+                    </div>
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>Account Type</label>
+                      <select value={acc_type} onChange={(e) => setAccType(e.target.value)} style={styles.select}>
+                        <option value="PCIF">Personal CIF Creation</option>
+                        <option value="NPCIF">Non-Personal CIF Creation</option>
+                      </select>
+                    </div>
                   </div>
-                  <div style={styles.formGroup}>
-                    <label style={styles.label}>Account Type:</label>
-                    <select
-                      value={accType}
-                      onChange={(e) => setAccType(e.target.value)}
-                      style={styles.input}
-                    >
-                      <option value="PCIF">Personal CIF Creation</option>
-                      <option value="NPCIF">Non-Personal CIF Creation</option>
-                    </select>
-                  </div>
-                  <button onClick={handleCifSubmit} style={styles.submitBtn} disabled={loading}>
-                    {loading ? "Submitting..." : "Submit"}
+                  <button onClick={handleCifSubmit} style={styles.primaryButton} disabled={cifLoading}>
+                    {cifLoading ? "Generating..." : "Generate CIF Records"}
                   </button>
                 </div>
 
-                {cifResponse && cifResponse.length > 0 && (
-                  <div style={styles.responseContainer}>
-                    <button onClick={downloadCsv} style={styles.downloadBtn}>
-                      Download CSV
-                    </button>
-                    {cifResponse.map((item, index) => {
-                      try {
-                        const parsedResData = JSON.parse(item.res_data);
-                        return (
-                          <div key={index} style={styles.resultItem}>
-                            <p>Customer Number: {parsedResData.CUSTOMER_NUMBER}</p>
-                          </div>
-                        );
-                      } catch (e) {
-                        return (
-                          <div key={index} style={styles.resultItem}>
-                            <p>Error parsing res_data: {item.res_data}</p>
-                          </div>
-                        );
-                      }
-                    })}
+                {response && response.length > 0 && (
+                  <div style={styles.resultsCard}>
+                    <div style={styles.resultsHeader}>
+                      <h3 style={styles.resultsTitle}>Generated Records ({response.length})</h3>
+                      <button onClick={downloadCsv} style={styles.downloadButton}>
+                        Download CSV
+                      </button>
+                    </div>
+                    <div style={styles.resultsList}>
+                      {response.map((item, index) => {
+                        try {
+                          const parsedResData = JSON.parse(item.res_data);
+                          return (
+                            <div key={index} style={styles.resultItem}>
+                              <div style={styles.resultNumber}>{index + 1}</div>
+                              <div style={styles.resultContent}>
+                                <span style={styles.resultLabel}>Customer Number:</span>
+                                <span style={styles.resultValue}>{parsedResData.CUSTOMER_NUMBER}
+                                  {parsedResData.ERROR_DESCRIPTION && <p className={styles.error}><strong>Error:</strong> {parsedResData.ERROR_DESCRIPTION}</p>}
+
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        } catch (e) {
+                          return (
+                            <div key={index} style={{ ...styles.resultItem, borderLeft: "3px solid #f44336" }}>
+                              <span style={styles.errorText}>Error: {item.res_data}</span>
+                            </div>
+                          );
+                        }
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
             )}
 
-            {/* ============================================================================ */}
-            {/* ACCOUNT SERVICE */}
-            {/* ============================================================================ */}
-            {activeService === "account" && (
-              <div style={styles.serviceContainer}>
-                <h1 style={styles.serviceTitle}>Create Account</h1>
-                <div style={styles.form}>
-                  <div style={styles.formGroup}>
-                    <label style={styles.label}>CIF Number:</label>
-                    <input
-                      type="text"
-                      value={cifNumber}
-                      onChange={(e) => setCifNumber(e.target.value)}
-                      style={styles.input}
-                      placeholder="Enter CIF Number"
-                      required
-                    />
-                  </div>
-                  <div style={styles.formGroup}>
-                    <label style={styles.label}>Region:</label>
-                    <select
-                      value={accountRegion}
-                      onChange={(e) => setAccountRegion(e.target.value)}
-                      style={styles.input}
-                    >
-                      <option value="X">X - UAT</option>
-                      <option value="O">O - UAT</option>
-                      <option value="Y">Y - UAT</option>
-                      <option value="Z">Z - UAT</option>
-                      <option value="K">K - Pre-Prod</option>
-                      <option value="J">J - Pre-Prod</option>
-                      <option value="R1">R1 - Pre-Prod</option>
-                      <option value="Y2">Y2 - Pre-Prod</option>
-                      <option value="L">L - Pre-Prod</option>
-                      <option value="C">C - Pre-Prod</option>
-                    </select>
-                  </div>
-                  <div style={styles.formGroup}>
-                    <label style={styles.label}>No. of Accounts:</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="10"
-                      value={noAccounts}
-                      onChange={(e) => setNoAccounts(e.target.value)}
-                      style={styles.input}
-                      required
-                    />
-                  </div>
-                  <div style={styles.formGroup}>
-                    <label style={styles.label}>Account Type:</label>
-                    <select
-                      value={accountType}
-                      onChange={(e) => setAccountType(e.target.value)}
-                      style={styles.input}
-                    >
-                      <option value="SBA">Savings Bank Account</option>
-                      <option value="CAA">Current Account</option>
-                    </select>
-                  </div>
-                  <button onClick={handleAccountSubmit} style={styles.submitBtn} disabled={accountLoading}>
-                    {accountLoading ? "Submitting..." : "Submit"}
-                  </button>
-                </div>
 
-                {accountResponse && accountResponse.length > 0 && (
-                  <div style={styles.responseContainer}>
-                    <button onClick={downloadAccountCsv} style={styles.downloadBtn}>
-                      Download CSV
-                    </button>
-                    {accountResponse.map((item, index) => {
-                      try {
-                        const parsedResData = JSON.parse(item.res_data);
-                        return (
-                          <div key={index} style={styles.resultItem}>
-                            <p>Account Number: {parsedResData.ACCOUNT_NUMBER}</p>
-                          </div>
-                        );
-                      } catch (e) {
-                        return (
-                          <div key={index} style={styles.resultItem}>
-                            <p>Error parsing res_data: {item.res_data}</p>
-                          </div>
-                        );
-                      }
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+            {/* //===========================================================
+// CCOD FRONT component
+//=========================================================== */}
 
-            {/* ============================================================================ */}
-            {/* ADDITIONAL FUNCTIONALITY - CCOD */}
-            {/* ============================================================================ */}
             {activeService === "ccod" && (
-              <div style={styles.serviceContainer}>
-                <h1 style={styles.serviceTitle}>CCOD Services</h1>
-                <div style={styles.comingSoonBox}>
-                  <p>CCOD Services - Coming Soon</p>
+              <div>
+                <div style={styles.pageHeader}>
+                  <div>
+                    <h1 style={styles.pageTitle}>CCOD Account Creation</h1>
+                    <p style={styles.pageSubtitle}>Create Cash Credit Overdraft accounts</p>
+                  </div>
                 </div>
+                <div style={styles.formCard}>
+                  <div style={styles.formGrid}>
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>Region</label>
+                      <select value={ccodregion} onChange={(e) => setccodRegion(e.target.value)} style={styles.select}>
+                        <option value="X">X - UAT</option>
+                        <option value="O">O - UAT</option>
+                        <option value="Y">Y - UAT</option>
+                        <option value="Z">Z - UAT</option>
+                        <option value="K">K - Pre-Prod</option>
+                        <option value="J">J - Pre-Prod</option>
+                        <option value="R1">R1 - Pre-Prod</option>
+                        <option value="Y2">Y2 - Pre-Prod</option>
+                        <option value="L">L - Pre-Prod</option>
+                        <option value="C">C - Pre-Prod</option>
+                      </select>
+                    </div>
+
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>Product Code:</label>
+                      <input
+                        type="text"
+                        value={cif}
+                        onChange={(e) => setCif(e.target.value)}
+                        style={styles.input}
+                        placeholder="Enter the 8 Digit CIF number"
+                      />
+                    </div>
+
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>Product Code:</label>
+                      <input
+                        type="text"
+                        value={prod_code}
+                        onChange={(e) => setProd_code(e.target.value)}
+                        style={styles.input}
+                        placeholder="Enter the Product code"
+                      />
+                    </div>
+
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>Account Segment:</label>
+                      <input
+                        type="text"
+                        value={acc_segment}
+                        onChange={(e) => setAcc_Segment(e.target.value)}
+                        style={styles.input}
+                        placeholder="Enter the Account segment code"
+                      />
+                    </div>
+
+
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>Number of Account</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={no_cif}
+                        onChange={(e) => setNo_acc(e.target.value)}
+                        style={styles.input}
+                        placeholder="Enter quantity (1-10)"
+                      />
+                    </div>
+
+                  </div>
+                  <button onClick={handleCcodSubmit} style={styles.primaryButton} disabled={ccodloading}>
+                    {ccodloading ? "Generating..." : "Generate CIF Records"}
+                  </button>
+                </div>
+
+                {response && response.length > 0 && (
+                  <div style={styles.resultsCard}>
+                    <div style={styles.resultsHeader}>
+                      <h3 style={styles.resultsTitle}>Generated Records ({ccodresponse.length})</h3>
+                      <button onClick={ccoddownloadCsv} style={styles.downloadButton}>
+                        Download CSV
+                      </button>
+                    </div>
+                    <div style={styles.resultsList}>
+                      {response.map((item, index) => {
+                        try {
+                          const parsedResData = JSON.parse(item.res_data);
+                          return (
+                            <div key={index} style={styles.resultItem}>
+                              <div style={styles.resultNumber}>{index + 1}</div>
+                              <div style={styles.resultContent}>
+                                <span style={styles.resultLabel}>Customer Number:</span>
+                                <span style={styles.resultValue}>{parsedResData.CUSTOMER_NUMBER}
+                                  {parsedResData.ERROR_DESCRIPTION && <p className={styles.error}><strong>Error:</strong> {parsedResData.ERROR_DESCRIPTION}</p>}
+
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        } catch (e) {
+                          return (
+                            <div key={index} style={{ ...styles.resultItem, borderLeft: "3px solid #f44336" }}>
+                              <span style={styles.errorText}>Error: {item.res_data}</span>
+                            </div>
+                          );
+                        }
+                      })}
+                    </div>
+                  </div>
+                )}
+
               </div>
             )}
 
-            {/* ============================================================================ */}
-            {/* ADDITIONAL FUNCTIONALITY - DEPOSIT */}
-            {/* ============================================================================ */}
+            {/* //===========================================================
+// DEPOSIT FRONT component
+//=========================================================== */}
+
             {activeService === "deposit" && (
-              <div style={styles.serviceContainer}>
-                <h1 style={styles.serviceTitle}>Deposit Services</h1>
-                <div style={styles.comingSoonBox}>
-                  <p>Deposit Services - Coming Soon</p>
+              <div>
+                <div style={styles.pageHeader}>
+                  <div>
+                    <h1 style={styles.pageTitle}>Deposit Account Creation</h1>
+                    <p style={styles.pageSubtitle}>Generate deposit accounts for testing</p>
+                  </div>
+                </div>
+                <div style={styles.comingSoonCard}>
+                  <Zap size={48} color="#2e7d32" />
+                  <h3 style={styles.comingSoonTitle}>Coming Soon</h3>
+                  <p style={styles.comingSoonText}>Deposit account creation feature is under development</p>
                 </div>
               </div>
+
             )}
+            {/* //===========================================================
+// CKYC FRONT component
+//=========================================================== */}
+
+            {activeService === "CKYC" && (
+              <div>
+                <div style={styles.pageHeader}>
+                  <div>
+                    <h1 style={styles.pageTitle}>Deposit Account Creation</h1>
+                    <p style={styles.pageSubtitle}>Generate deposit accounts for testing</p>
+                  </div>
+                </div>
+                <div style={styles.comingSoonCard}>
+                  <Zap size={48} color="#2e7d32" />
+                  <h3 style={styles.comingSoonTitle}>Coming Soon</h3>
+                  <p style={styles.comingSoonText}>Deposit account creation feature is under development</p>
+                </div>
+              </div>
+
+            )}
+
+            {/* 
+ //===========================================================
+// SOCIAL ATTRIBUTE FRONT component
+//=========================================================== */}
+
+            {activeService === "social attribute" && (
+              <div>
+                <div style={styles.pageHeader}>
+                  <div>
+                    <h1 style={styles.pageTitle}>Deposit Account Creation</h1>
+                    <p style={styles.pageSubtitle}>Generate deposit accounts for testing</p>
+                  </div>
+                </div>
+                <div style={styles.comingSoonCard}>
+                  <Zap size={48} color="#2e7d32" />
+                  <h3 style={styles.comingSoonTitle}>Coming Soon</h3>
+                  <p style={styles.comingSoonText}>Deposit account creation feature is under development</p>
+                </div>
+              </div>
+
+            )}
+
+            {/* 
+ //===========================================================
+// ADDITINAL FUNCTIONALITY FRONT component
+//=========================================================== */}
+
+            {activeService === "additional functionality" && (
+              <div>
+                <div style={styles.pageHeader}>
+                  <div>
+                    <h1 style={styles.pageTitle}>Deposit Account Creation</h1>
+                    <p style={styles.pageSubtitle}>Generate deposit accounts for testing</p>
+                  </div>
+                </div>
+                <div style={styles.comingSoonCard}>
+                  <Zap size={48} color="#2e7d32" />
+                  <h3 style={styles.comingSoonTitle}>Coming Soon</h3>
+                  <p style={styles.comingSoonText}>Deposit account creation feature is under development</p>
+                </div>
+              </div>
+
+            )}
+
+
           </main>
         </div>
+      </div>
+    );
+  }
 
-        <footer style={styles.footer}>
-          <p>© 2025 State Bank of India (SBI). All rights reserved.</p>
-        </footer>
+  if (loading) {
+    return (
+      <div style={styles.loadingContainer}>
+        <div style={styles.spinner}></div>
+        <p style={styles.loadingText}>Loading...</p>
       </div>
     );
   }
@@ -737,182 +1132,637 @@ export default function SBIApp() {
 const styles = {
   welcomeContainer: {
     minHeight: "100vh",
+    backgroundColor: "#f8fafc",
     display: "flex",
     flexDirection: "column",
-    backgroundColor: "#f5f5f5",
   },
   navbar: {
-    backgroundColor: "#003478",
-    color: "white",
-    padding: "1rem 2rem",
+    backgroundColor: "white",
+    padding: "1.25rem 3rem",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+    borderBottom: "1px solid #e2e8f0",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
   },
   navBrand: {
     display: "flex",
     alignItems: "center",
-    gap: "0.5rem",
+    gap: "0.75rem",
+  },
+  logoCircle: {
+    width: "40px",
+    height: "40px",
+    borderRadius: "8px",
+    backgroundColor: "#003478",
+    color: "white",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: "bold",
+    fontSize: "0.9rem",
+  },
+  logoCircleSmall: {
+    width: "32px",
+    height: "32px",
+    borderRadius: "6px",
+    backgroundColor: "#003478",
+    color: "white",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: "bold",
+    fontSize: "0.75rem",
   },
   brandText: {
-    fontSize: "1.5rem",
-    fontWeight: "bold",
+    fontSize: "1.25rem",
+    fontWeight: "600",
+    color: "#1e293b",
+  },
+  brandTextSmall: {
+    fontSize: "1rem",
+    fontWeight: "600",
+    color: "#1e293b",
   },
   navLinks: {
     display: "flex",
-    gap: "1rem",
+    gap: "0.75rem",
   },
   navBtn: {
-    padding: "0.5rem 1rem",
-    border: "2px solid white",
-    backgroundColor: "transparent",
-    color: "white",
-    borderRadius: "4px",
+    padding: "0.625rem 1.5rem",
+    border: "1px solid #cbd5e1",
+    backgroundColor: "white",
+    color: "#475569",
+    borderRadius: "6px",
     cursor: "pointer",
-    fontSize: "1rem",
+    fontSize: "0.9rem",
     fontWeight: "500",
-    transition: "all 0.3s",
+    transition: "all 0.2s",
   },
   navBtnPrimary: {
-    padding: "0.5rem 1rem",
+    padding: "0.625rem 1.5rem",
     border: "none",
-    backgroundColor: "#FF6B6B",
+    backgroundColor: "#003478",
     color: "white",
-    borderRadius: "4px",
+    borderRadius: "6px",
     cursor: "pointer",
-    fontSize: "1rem",
+    fontSize: "0.9rem",
     fontWeight: "500",
-  },
-  navRight: {
-    display: "flex",
-    alignItems: "center",
-    gap: "1rem",
-  },
-  userName: {
-    fontSize: "1rem",
   },
   heroSection: {
     flex: 1,
     display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
+    padding: "3rem 3rem",
+    gap: "3rem",
     alignItems: "center",
-    textAlign: "center",
-    padding: "2rem",
+  },
+  heroContent: {
+    flex: 1,
+  },
+  heroTag: {
+    display: "inline-block",
+    backgroundColor: "#e3f2fd",
+    color: "#003478",
+    padding: "0.5rem 1rem",
+    borderRadius: "20px",
+    fontSize: "0.75rem",
+    fontWeight: "600",
+    marginBottom: "1rem",
   },
   heroTitle: {
-    fontSize: "3rem",
-    fontWeight: "bold",
+    fontSize: "3.5rem",
+    fontWeight: "700",
+    color: "#1e293b",
     marginBottom: "1rem",
-    color: "#003478",
+    lineHeight: "1.2",
   },
   heroSubtitle: {
-    fontSize: "1.2rem",
-    color: "#666",
+    fontSize: "1.125rem",
+    color: "#64748b",
     marginBottom: "2rem",
   },
   heroButtons: {
     display: "flex",
     gap: "1rem",
-    justifyContent: "center",
   },
-  primaryBtn: {
-    padding: "1rem 2rem",
+  heroPrimaryBtn: {
+    padding: "0.875rem 2rem",
     backgroundColor: "#003478",
     color: "white",
     border: "none",
-    borderRadius: "4px",
-    fontSize: "1rem",
-    fontWeight: "bold",
+    borderRadius: "6px",
     cursor: "pointer",
+    fontSize: "1rem",
+    fontWeight: "600",
+    display: "flex",
+    alignItems: "center",
+    gap: "0.5rem",
+  },
+  heroSecondaryBtn: {
+    padding: "0.875rem 2rem",
+    backgroundColor: "white",
+    color: "#003478",
+    border: "2px solid #003478",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontSize: "1rem",
+    fontWeight: "600",
+  },
+  btnArrow: {
+    fontSize: "1.25rem",
+  },
+  featuresGrid: {
+    flex: 1,
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    gap: "1rem",
+  },
+  featureCard: {
+    backgroundColor: "white",
+    padding: "1.5rem",
+    borderRadius: "8px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+  },
+  footer: {
+    backgroundColor: "#f1f5f9",
+    padding: "2rem",
+    textAlign: "center",
+    borderTop: "1px solid #e2e8f0",
+    color: "#64748b",
   },
   authContainer: {
     minHeight: "100vh",
     display: "flex",
-    flexDirection: "column",
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#f8fafc",
   },
-  backBtn: {
-    padding: "0.5rem 1rem",
-    border: "2px solid white",
-    backgroundColor: "transparent",
+  authSplit: {
+    display: "flex",
+    width: "100%",
+  },
+  authLeft: {
+    flex: 1,
+    backgroundColor: "#003478",
     color: "white",
-    borderRadius: "4px",
-    cursor: "pointer",
-    fontSize: "1rem",
+    padding: "3rem",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
   },
-  authFormContainer: {
+  authBrand: {
+    display: "flex",
+    alignItems: "center",
+    gap: "0.75rem",
+    marginBottom: "2rem",
+  },
+  authLeftTitle: {
+    fontSize: "2.5rem",
+    fontWeight: "700",
+    marginBottom: "0.5rem",
+  },
+  authLeftSubtitle: {
+    fontSize: "1rem",
+    opacity: 0.9,
+    marginBottom: "2rem",
+  },
+  authFeatureList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.75rem",
+  },
+  authFeature: {
+    fontSize: "0.95rem",
+    opacity: 0.9,
+  },
+  authRight: {
     flex: 1,
     display: "flex",
-    justifyContent: "center",
     alignItems: "center",
-    padding: "2rem",
+    justifyContent: "center",
+    padding: "3rem",
+    backgroundColor: "white",
   },
   authForm: {
-    backgroundColor: "white",
-    padding: "2rem",
-    borderRadius: "8px",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
     width: "100%",
     maxWidth: "400px",
   },
+  backLink: {
+    backgroundColor: "transparent",
+    border: "none",
+    color: "#0284c7",
+    cursor: "pointer",
+    fontSize: "0.9rem",
+    fontWeight: "500",
+    marginBottom: "2rem",
+  },
   authTitle: {
+    fontSize: "1.75rem",
+    fontWeight: "700",
+    color: "#1e293b",
+    marginBottom: "0.5rem",
+  },
+  authSubtitle: {
+    color: "#64748b",
     marginBottom: "1.5rem",
-    color: "#003478",
+    fontSize: "0.95rem",
   },
   formGroup: {
-    marginBottom: "1rem",
+    marginBottom: "1.25rem",
+  },
+  formRow: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "1rem",
   },
   label: {
     display: "block",
-    marginBottom: "0.5rem",
     fontWeight: "500",
-    color: "#333",
+    marginBottom: "0.5rem",
+    color: "#1e293b",
+    fontSize: "0.9rem",
   },
   input: {
     width: "100%",
     padding: "0.75rem",
-    border: "1px solid #ddd",
-    borderRadius: "4px",
-    fontSize: "1rem",
+    border: "1px solid #cbd5e1",
+    borderRadius: "6px",
+    fontSize: "0.95rem",
     boxSizing: "border-box",
+    fontFamily: "inherit",
+  },
+  select: {
+    width: "100%",
+    padding: "0.75rem",
+    border: "1px solid #cbd5e1",
+    borderRadius: "6px",
+    fontSize: "0.95rem",
+    boxSizing: "border-box",
+    fontFamily: "inherit",
+    backgroundColor: "white",
+    cursor: "pointer",
+  },
+  errorMsg: {
+    backgroundColor: "#fee2e2",
+    color: "#991b1b",
+    padding: "0.875rem",
+    borderRadius: "6px",
+    marginBottom: "1rem",
+    fontSize: "0.9rem",
   },
   submitBtn: {
     width: "100%",
-    padding: "0.75rem",
+    padding: "0.875rem",
     backgroundColor: "#003478",
     color: "white",
     border: "none",
-    borderRadius: "4px",
+    borderRadius: "6px",
     fontSize: "1rem",
-    fontWeight: "bold",
+    fontWeight: "600",
     cursor: "pointer",
-    marginTop: "1rem",
+    marginTop: "0.5rem",
   },
-  switchAuth: {
-    textAlign: "center",
-    marginTop: "1rem",
-    color: "#666",
+  divider: {
+    display: "flex",
+    alignItems: "center",
+    margin: "1.5rem 0",
   },
-  linkBtn: {
+  dividerText: {
+    color: "#94a3b8",
+    fontSize: "0.9rem",
+  },
+  switchBtn: {
+    width: "100%",
+    padding: "0.875rem",
+    backgroundColor: "#e3f2fd",
     color: "#003478",
+    border: "none",
+    borderRadius: "6px",
+    fontSize: "1rem",
+    fontWeight: "600",
     cursor: "pointer",
-    fontWeight: "bold",
-    textDecoration: "underline",
   },
   dashboardContainer: {
     minHeight: "100vh",
+    backgroundColor: "#f8fafc",
     display: "flex",
     flexDirection: "column",
-    backgroundColor: "#f5f5f5",
+  },
+  dashboardNav: {
+    backgroundColor: "white",
+    padding: "1rem 2rem",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderBottom: "1px solid #e2e8f0",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+  },
+  dashNavLeft: {
+    display: "flex",
+    alignItems: "center",
+    gap: "1rem",
+  },
+  dashNavRight: {
+    display: "flex",
+    alignItems: "center",
+    gap: "1.5rem",
+  },
+  menuBtn: {
+    backgroundColor: "transparent",
+    border: "none",
+    cursor: "pointer",
+    color: "#475569",
+  },
+  userInfo: {
+    display: "flex",
+    alignItems: "center",
+    gap: "0.75rem",
+  },
+  userAvatar: {
+    width: "40px",
+    height: "40px",
+    borderRadius: "6px",
+    backgroundColor: "#003478",
+    color: "white",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: "bold",
+    fontSize: "0.85rem",
+  },
+  userDetails: {
+    display: "flex",
+    flexDirection: "column",
+  },
+  userNameNav: {
+    fontWeight: "600",
+    color: "#1e293b",
+    fontSize: "0.9rem",
+  },
+  userRole: {
+    fontSize: "0.8rem",
+    color: "#64748b",
+  },
+  logoutBtnNav: {
+    backgroundColor: "#fee2e2",
+    border: "none",
+    cursor: "pointer",
+    padding: "0.5rem",
+    borderRadius: "6px",
+    color: "#991b1b",
   },
   mainContainer: {
     display: "flex",
     flex: 1,
   },
   sidebar: {
-    width: "250px",
+    backgroundColor: "white",
+    borderRight: "1px solid #e2e8f0",
+    transition: "all 0.3s",
+    overflowY: "auto",
+  },
+  sidebarContent: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "2rem",
+  },
+  sidebarSection: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.5rem",
+    paddingRight: "1.5rem",
+  },
+  sidebarLabel: {
+    fontSize: "0.75rem",
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    paddingLeft: "1rem",
+    marginBottom: "0.5rem",
+  },
+  sidebarBtn: {
+    padding: "0.75rem 1rem",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: "0.75rem",
+    fontSize: "0.95rem",
+    transition: "all 0.2s",
+  },
+  content: {
+    flex: 1,
+    padding: "2rem",
+    overflowY: "auto",
+  },
+  pageHeader: {
+    marginBottom: "2rem",
+  },
+  pageTitle: {
+    fontSize: "2rem",
+    fontWeight: "700",
+    color: "#1e293b",
+    marginBottom: "0.25rem",
+  },
+  pageSubtitle: {
+    color: "#64748b",
+    fontSize: "1rem",
+  },
+  statsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: "1.5rem",
+    marginBottom: "2rem",
+  },
+  statCard: {
+    backgroundColor: "white",
+    padding: "1.5rem",
+    borderRadius: "8px",
+    display: "flex",
+    alignItems: "flex-start",
+    gap: "1rem",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+  },
+  statIcon: {
+    width: "50px",
+    height: "50px",
+    borderRadius: "6px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  statContent: {
+    display: "flex",
+    flexDirection: "column",
+  },
+  statLabel: {
+    fontSize: "0.85rem",
+    color: "#64748b",
+    fontWeight: "500",
+  },
+  statValue: {
+    fontSize: "1.75rem",
+    fontWeight: "700",
+    color: "#1e293b",
+  },
+  userProfileCard: {
+    backgroundColor: "white",
+    padding: "2rem",
+    borderRadius: "8px",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+  },
+  profileHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: "0.75rem",
+    marginBottom: "1.5rem",
+  },
+  profileTitle: {
+    fontSize: "1.25rem",
+    fontWeight: "700",
+    color: "#1e293b",
+  },
+  profileGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, 1fr)",
+    gap: "1.5rem",
+  },
+  profileItem: {
+    display: "flex",
+    flexDirection: "column",
+  },
+  profileLabel: {
+    fontSize: "0.85rem",
+    color: "#64748b",
+    fontWeight: "500",
+    marginBottom: "0.25rem",
+  },
+  profileValue: {
+    fontSize: "1rem",
+    color: "#1e293b",
+    fontWeight: "600",
+  },
+  formCard: {
+    backgroundColor: "white",
+    padding: "2rem",
+    borderRadius: "8px",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+    marginBottom: "2rem",
+  },
+  formGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: "1.5rem",
+    marginBottom: "1.5rem",
+  },
+  primaryButton: {
+    width: "100%",
+    padding: "0.875rem",
     backgroundColor: "#003478",
     color: "white",
-  
+    border: "none",
+    borderRadius: "6px",
+    fontSize: "1rem",
+    fontWeight: "600",
+    cursor: "pointer",
+  },
+  resultsCard: {
+    backgroundColor: "white",
+    padding: "2rem",
+    borderRadius: "8px",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+  },
+  resultsHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "1.5rem",
+  },
+  resultsTitle: {
+    fontSize: "1.25rem",
+    fontWeight: "700",
+    color: "#1e293b",
+  },
+  downloadButton: {
+    padding: "0.625rem 1.5rem",
+    backgroundColor: "#059669",
+    color: "white",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontWeight: "600",
+  },
+  resultsList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "1rem",
+  },
+  resultItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: "1rem",
+    padding: "1rem",
+    backgroundColor: "#f8fafc",
+    borderRadius: "6px",
+    borderLeft: "3px solid #003478",
+  },
+  resultNumber: {
+    fontWeight: "700",
+    color: "#003478",
+    width: "30px",
+  },
+  resultContent: {
+    display: "flex",
+    flexDirection: "column",
+  },
+  resultLabel: {
+    fontSize: "0.85rem",
+    color: "#64748b",
+  },
+  resultValue: {
+    fontSize: "0.95rem",
+    fontWeight: "600",
+    color: "#1e293b",
+  },
+  errorText: {
+    color: "#991b1b",
+  },
+  comingSoonCard: {
+    backgroundColor: "white",
+    padding: "3rem 2rem",
+    borderRadius: "8px",
+    textAlign: "center",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+  },
+  comingSoonTitle: {
+    fontSize: "1.5rem",
+    fontWeight: "700",
+    color: "#1e293b",
+    marginTop: "1rem",
+  },
+  comingSoonText: {
+    color: "#64748b",
+    marginTop: "0.5rem",
+  },
+  loadingContainer: {
+    minHeight: "100vh",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+  },
+  spinner: {
+    width: "50px",
+    height: "50px",
+    border: "4px solid #e2e8f0",
+    borderTop: "4px solid #003478",
+    borderRadius: "50%",
+    animation: "spin 1s linear infinite",
+    marginBottom: "1rem",
+  },
+  loadingText: {
+    color: "#64748b",
+    fontSize: "1rem",
+  },
+};
